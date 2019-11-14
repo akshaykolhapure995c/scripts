@@ -1,0 +1,185 @@
+CM Upgrade [For a cluster who doesn't have Nav]
+
+
+Fill out the form on the cloudera in order to get the relevant upgrade information and commands from the cloudera itself. 
+
+https://docs.cloudera.com/documentation/enterprise/upgrade/topics/ug_cm_upgrade_backup.html?cdoc-os=redhat+6&cdoc-db=postgresql&cdoc-product=none&cdoc-cm-from=5.10&cdoc-cm-dest=5.16
+
+Choose the correct Operating System, Database, and current and desired version of upgrade above.
+
+You must have SSH access to the Cloudera Manager server hosts and be able to log in using the root account or an account that has password-less sudo permission for all hosts.
+
+Log in to the Cloudera Manager Server host. 
+
+Collect information (host name, port number, database name, user name and password) for the following databases
+    Reports Manager
+    Navigator Audit Server [if installed]
+    Navigator Metadata Server [if installed]
+    Activity Monitorp[if active]
+
+
+using
+
+cat /etc/cloudera-scm-server/db.properties
+
+ For example:
+
+...
+com.cloudera.cmf.db.type=...
+com.cloudera.cmf.db.host=database_hostname:database_port
+com.cloudera.cmf.db.name=scm
+com.cloudera.cmf.db.user=scm
+com.cloudera.cmf.db.password=SOME_PASSWORD
+
+You can find the database information by using the Cloudera Manager Admin Console. Go to Clusters > Cloudera Management Service > Configuration and select the Database category. You may need to contact your database administrator to obtain the passwords.
+
+For Example
+
+
+Reports Manager
+
+Database Host Name:  ip-172-31-35-28.us-east-2.compute.internal:7432 
+Database Type:Postgre 
+ Database Name : rman
+Username rman
+Password  6nrU1IyItV [noted during installation] 
+
+   2.Back Up Cloudera Manager Agent
+
+
+   Backup up the following Cloudera Manager agent files on all hosts:
+
+   Use clustercmd.sh
+
+sh clustercmd.sh uptime   #Forchecking
+
+   Create a top level backup directory. 
+
+sh clustercmd.sh export CM_BACKUP_DIR="`date +%F`-CM5.10"
+
+sh clustercmd.sh echo $CM_BACKUP_DIR
+
+sh clustercmd.sh  'mkdir -p \"$CM_BACKUP_DIR\"'
+
+   Back up the Agent directory and the runtime state. 
+
+sh clustercmd.sh sudo -E tar -cf $CM_BACKUP_DIR/cloudera-scm-agent.tar --exclude=*.sock /etc/cloudera-scm-agent /etc/default/cloudera-scm-agent /var/run/cloudera-scm-agent /var/lib/cloudera-scm-agent
+
+   Back up the existing repository directory. 
+
+sh clustercmd.sh sudo -E tar -cf $CM_BACKUP_DIR/repository.tar /etc/yum.repos.d
+
+   Back Up the Cloudera Management Service
+   
+   On the host where the Service Monitor role is configured to run, backup the following directory: 
+
+sudo cp -rp /var/lib/cloudera-service-monitor /var/lib/cloudera-service-monitor-`date +%F`-CM5.10
+ 
+   On the host where the Host Monitor role is configured to run, backup the following directory: 
+
+sudo cp -rp /var/lib/cloudera-host-monitor /var/lib/cloudera-host-monitor-`date +%F`-CM5.10
+
+   On the host where the Event Server role is configured to run, back up the following directory: 
+
+sudo cp -rp /var/lib/cloudera-scm-eventserver /var/lib/cloudera-scm-eventserver-`date +%F`-CM5.10
+  
+
+  Now Stop the Cloudera Management Service from Admin Console.  
+
+  Log in to the Cloudera Manager Server host. 
+  Stop the Cloudera Manager Server. 
+
+sudo service cloudera-scm-server stop 	
+
+  Back Up the Cloudera Manager Databases
+
+  Back up the Cloudera Manager server database
+
+pg_dump -h localhost -U scm -W -p 7432 scm > $HOME/scm-backup-`date +%F`-CM5.10.sql
+
+Back up All other Cloudera Manager databases - Use the database information that you collected in a previous step.
+
+pg_dump -h ip-172-31-35-28.us-east-2.compute.internal -U rman -W -p 7432 rman > $HOME/rman-backup-`date +%F`-CM5.10.sql
+
+
+
+   Back Up Cloudera Manager Server
+
+   Log in to the Cloudera Manager Server host.
+   Create a top-level backup directory.  
+
+export CM_BACKUP_DIR="`date +%F`-CM5.10"
+echo $CM_BACKUP_DIR
+mkdir -p $CM_BACKUP_DIR
+
+   Back up the Cloudera Manager Server directories: 
+
+sudo -E tar -cf $CM_BACKUP_DIR/cloudera-scm-server.tar /etc/cloudera-scm-server /etc/default/cloudera-scm-server
+
+   Back up the existing repository directory. 
+
+sudo -E tar -cf $CM_BACKUP_DIR/repository.tar /etc/yum.repos.d
+
+
+    Upgrading the Cloudera Manager Server
+
+
+    Establish Access to the Software
+
+    Remove any older files in the existing repository directory: 
+ 
+
+sudo rm /etc/yum.repos.d/cloudera*manager.repo*
+ 	
+   Create a repository file so that the package manager can locate and download the binaries: 
+
+sudo nano /etc/yum.repos.d/cloudera-manager.repo 
+
+   with the following content:
+
+[cloudera-manager]
+# Packages for Cloudera Manager
+name=Cloudera Manager
+baseurl=https://archive.cloudera.com/cm5/redhat/6/x86_64/cm/5.11
+gpgkey=https://archive.cloudera.com/cm5/redhat/6/x86_64/cm/RPM-GPG-KEY-cloudera
+gpgcheck=1
+
+
+    Upgrade the Cloudera Manager Server
+
+    Log in to the Cloudera Manager Server host. 
+
+    Stop the Cloudera Manager Server.
+
+sudo service cloudera-scm-server stop
+
+    Stop the Cloudera Manager Agent.
+
+sudo service cloudera-scm-agent stop
+
+    Upgrade the packages.
+
+sudo yum clean all
+sudo yum upgrade cloudera-manager-server cloudera-manager-daemons cloudera-manager-agent 
+
+    Verify that you have the correct packages installed.
+
+rpm -qa 'cloudera-manager-*'
+
+
+    Start the Cloudera Manager Agent.
+
+sudo service cloudera-scm-agent start
+
+    Start the Cloudera Manager Server.
+
+sudo service cloudera-scm-server start
+
+    Use a Web browser to open the Cloudera Manager Admin Console using the following URL: 
+
+http://3.18.113.90:7180/cmf/upgrade-wizard/welcome
+
+   
+    Upgrade the Cloudera Manager Agents
+
+Upgrade the Agents using Cloudera Manager (Recommended)
